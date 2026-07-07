@@ -20,6 +20,15 @@ earn, so almost nobody ever sees the speed-up it's supposed to grant.
   animation, since both already check the same achievement
 - Equipping an actual Hunting Kit still stacks on top for the fastest tier, same as vanilla;
   this mod only removes the grind, it doesn't change that part of the balance
+- If FDDA Redone's mutant skinning is installed, also patches its animation queue (`lam2`) to
+  drop the extra "tucking the part away" animation that plays right after the knife-cut. The
+  part is already in your inventory by the time that animation would start -
+  `ui_mutant_loot.script` adds it before FDDA ever queues the animation - so skipping it costs
+  nothing and removes what was often as much dead time as the cut itself
+- We deliberately don't touch the knife-cut animation's own playback speed. The sound played
+  during it is an engine-level sound baked into the animation/motion itself, not a scriptable
+  `sound_object` we could pitch-shift to match - so speeding up the visual animation desyncs
+  it from its audio. Skipping the (silent) pickup animation avoids that problem entirely
 - MCM toggle to disable if you'd rather keep vanilla pacing, plus a debug log option
 
 ## Installation

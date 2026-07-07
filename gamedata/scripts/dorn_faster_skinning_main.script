@@ -14,6 +14,20 @@
 	specifically always returns true (while enabled) -- applying the skinning speed-up the
 	achievement already grants by default, without touching any animation files. Equipping an
 	actual Hunting Kit still stacks on top for the fastest tier, same as vanilla.
+
+	With FDDA Redone's mutant skinning installed, this also drops the extra per-item pickup
+	animation ("mutant_loot") that plays right after the knife-cut ("mutant_skin"), by patching
+	it out of lam2's action queue (lam2.add_action). The looted item is already in the actor's
+	inventory by the time this animation would play -- ui_mutant_loot.script's
+	UIMutantLoot:Loot() calls alife_create_item() before this action is ever queued -- so
+	skipping it costs the player nothing, it just removes a redundant hand animation that on
+	its own eats as much time as the knife-cut itself.
+
+	Note: we intentionally don't multiply animation playback speed (e.g. the knife-cut). The
+	sound played during that animation is an engine-level sound baked into the motion itself,
+	not a scriptable sound_object we could pitch-shift to match -- so speeding up the visual
+	animation desyncs it from its audio. Skipping the pickup animation entirely avoids that
+	problem since nothing about the knife-cut animation itself is touched.
 ]]
 
 local MOD_ID = "dorn_faster_skinning"
@@ -22,6 +36,7 @@ local DORN_COMMON_VERSION = "dorn_common_105895da" -- managed by sync-dorn-commo
 local DORN
 
 local WELL_DRESSED_ID = "well_dressed"
+local ACTION_MUTANT_LOOT = "mutant_loot"
 
 local CONFIG = {
 	enabled = true,
@@ -29,6 +44,7 @@ local CONFIG = {
 }
 
 local original_has_achievement = nil
+local original_lam2_add_action = nil
 
 local function log(msg)
 	if not (DORN and DORN.dbg) then
@@ -60,6 +76,27 @@ local function patch_achievements()
 	log("game_achievements.has_achievement patched")
 end
 
+local function patched_add_action(action)
+	if CONFIG.enabled and action and action.name == ACTION_MUTANT_LOOT then
+		log("mutant_loot: dropped from queue (item is already in inventory)")
+		return
+	end
+	return original_lam2_add_action(action)
+end
+
+local function patch_lam2()
+	if original_lam2_add_action then
+		return
+	end
+	if not (_G.lam2 and _G.lam2.add_action) then
+		log("lam2.add_action not found, nothing to patch (FDDA Redone's mutant skinning not installed?)")
+		return
+	end
+	original_lam2_add_action = _G.lam2.add_action
+	_G.lam2.add_action = patched_add_action
+	log("lam2.add_action patched")
+end
+
 local function on_option_change()
 	CONFIG.enabled = DORN.mcm.bool(MOD_ID, "main/enabled", true)
 	CONFIG.debug_log = DORN.mcm.bool(MOD_ID, "development/debug_log", false)
@@ -73,6 +110,7 @@ function on_game_start()
 	DORN = _G[DORN_COMMON_VERSION].load(MOD_ID)
 
 	patch_achievements()
+	patch_lam2()
 
 	RegisterScriptCallback("actor_on_update", on_actor_on_update)
 	RegisterScriptCallback("on_option_change", on_option_change)
