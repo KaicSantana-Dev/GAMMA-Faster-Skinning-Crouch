@@ -17,7 +17,7 @@
 ]]
 
 local MOD_ID = "dorn_faster_skinning"
-local DORN_COMMON_VERSION = "dorn_common_3ea88f51" -- managed by sync-dorn-common.sh, do not hand-edit
+local DORN_COMMON_VERSION = "dorn_common_105895da" -- managed by sync-dorn-common.sh, do not hand-edit
 
 local DORN
 
