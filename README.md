@@ -25,10 +25,14 @@ earn, so almost nobody ever sees the speed-up it's supposed to grant.
   part is already in your inventory by the time that animation would start -
   `ui_mutant_loot.script` adds it before FDDA ever queues the animation - so skipping it costs
   nothing and removes what was often as much dead time as the cut itself
-- We deliberately don't touch the knife-cut animation's own playback speed. The sound played
-  during it is an engine-level sound baked into the animation/motion itself, not a scriptable
-  `sound_object` we could pitch-shift to match - so speeding up the visual animation desyncs
-  it from its audio. Skipping the (silent) pickup animation avoids that problem entirely
+- If FDDA Redone's mutant skinning is installed, also applies FDDA body search's height-based
+  auto-crouch on the knife-cut (honors FDDA Redone MCM -> Body Search -> "Auto crouch")
+- Optional (off by default): a slider to also speed up the knife-cut animation itself, for
+  players who want to push past what the achievement/hunting kit bonuses give. Above 1x we
+  swap in our own cut sound pitched to match the new speed (since the vanilla one can't be
+  sped up to match) and skip all camera motion tied to the cut (lam2's cam effector, the
+  actor look-at tilt, and the hud fov zoom). Leave the slider at 1x for the original,
+  unmodified pacing, sound, and camera motion
 - MCM toggle to disable if you'd rather keep vanilla pacing, plus a debug log option
 
 ## Installation

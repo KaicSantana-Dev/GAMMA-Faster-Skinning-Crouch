@@ -23,28 +23,49 @@
 	skipping it costs the player nothing, it just removes a redundant hand animation that on
 	its own eats as much time as the knife-cut itself.
 
-	Note: we intentionally don't multiply animation playback speed (e.g. the knife-cut). The
-	sound played during that animation is an engine-level sound baked into the motion itself,
-	not a scriptable sound_object we could pitch-shift to match -- so speeding up the visual
-	animation desyncs it from its audio. Skipping the pickup animation entirely avoids that
-	problem since nothing about the knife-cut animation itself is touched.
+	Optionally (off by default), we also multiply the knife-cut ("mutant_skin") animation's own
+	playback speed, by patching liz_fdda_redone_mutant_skinning.get_template_action_mutant_skin.
+	The cut's own hud animation doesn't speed up its sound to match, so we suppress the vanilla
+	cut sound (ui_mutant_loot.script's unconditional xr_sound.set_sound_play(AC_ID,
+	"inv_mutant_loot_animal") call, patched via xr_sound.set_sound_play) and instead play our own
+	scriptable sound_object (reusing FDDA's existing "harvest_use" cut sound), pitched to match
+	the multiplier via play_no_feedback's frequency argument, so it stays in sync with the faster
+	visual. We also skip all camera motion tied to the cut when sped up: FDDA's own camera-dip
+	effector (replaced on_enter), lam2's automatic cam effector from the knife hud section's
+	"cam" ltx field (by pointing a.cam at a missing key), the actor look-at-target tilt, and
+	the hud_fov zoom lam2 applies on enter.
+
+	With FDDA Redone's mutant skinning installed, we also mirror FDDA body search's height-based
+	auto-crouch on the knife-cut: crouch down when the corpse is far enough below the actor,
+	stand back up when it is above, and restore the prior crouch state once the cut ends. Honors
+	FDDA Redone MCM -> Body Search -> "Auto crouch".
 ]]
 
 local MOD_ID = "dorn_faster_skinning"
-local DORN_COMMON_VERSION = "dorn_common_105895da" -- managed by sync-dorn-common.sh, do not hand-edit
+local DORN_COMMON_VERSION = "dorn_common_f575cc9b" -- managed by sync-dorn-common.sh, do not hand-edit
 
 local DORN
 
 local WELL_DRESSED_ID = "well_dressed"
 local ACTION_MUTANT_LOOT = "mutant_loot"
+local MUTANT_LOOT_SOUND = "inv_mutant_loot_animal"
+local SKIN_CUT_SOUND = "interface\\item_usage\\harvest_use"
+local LAM2_CAM_EFFECTOR_ID = 2190 -- lam2.get_template_action_play_animation's cam effector id
+local LAM2_MISSING_LTX_KEY = "__dorn_no_ltx__" -- bogus ini key so lam2 skips cam/snd lookups
+local MUTANT_CROUCH_BONE = "bip01_spine1"
+local CROUCH_HEIGHT_DELTA = 0.9 -- matches liz_fdda_redone_body_search.is_should_crouch
 
 local CONFIG = {
 	enabled = true,
 	debug_log = false,
+	skin_speed_multiplier = 1,
 }
 
 local original_has_achievement = nil
 local original_lam2_add_action = nil
+local original_get_template_action_mutant_skin = nil
+local original_xr_sound_set_sound_play = nil
+local skin_cut_sfx = nil
 
 local function log(msg)
 	if not (DORN and DORN.dbg) then
@@ -97,9 +118,178 @@ local function patch_lam2()
 	log("lam2.add_action patched")
 end
 
+local function is_body_search_auto_crouch_enabled()
+	if not (_G.liz_fdda_redone_mcm and _G.liz_fdda_redone_mcm.get_config) then
+		return true
+	end
+	return _G.liz_fdda_redone_mcm.get_config("body_search/enable_crouch") ~= false
+end
+
+local function get_mutant_crouch_target_pos(obj)
+	if not obj then
+		return nil
+	end
+	local target_pos = obj:bone_position(MUTANT_CROUCH_BONE)
+	if _G.liz_fdda_redone_body_search and _G.liz_fdda_redone_body_search.clamp_target_pos_height then
+		return _G.liz_fdda_redone_body_search.clamp_target_pos_height(target_pos, 7)
+	end
+	local actor_pos = device().cam_pos
+	local height_delta = actor_pos.y - target_pos.y
+	if height_delta > 7 then
+		target_pos.y = actor_pos.y - 7
+	elseif height_delta < -7 then
+		target_pos.y = actor_pos.y + 7
+	end
+	return target_pos
+end
+
+local function should_auto_crouch_for_target(target_pos, was_crouching)
+	if not is_body_search_auto_crouch_enabled() then
+		return false
+	end
+	local height_delta = device().cam_pos.y - target_pos.y
+	if height_delta < -CROUCH_HEIGHT_DELTA and was_crouching then
+		return true
+	end
+	if height_delta > CROUCH_HEIGHT_DELTA and not was_crouching then
+		return true
+	end
+	return false
+end
+
+local function press_auto_crouch()
+	if not get_console_cmd(1, "g_crouch_toggle") then
+		exec_console_cmd("g_crouch_toggle 1")
+	end
+	level.press_action(bind_to_dik(key_bindings.kCROUCH))
+	level.release_action(bind_to_dik(key_bindings.kCROUCH))
+end
+
+local function restore_auto_crouch(was_crouching)
+	if was_crouching == IsMoveState("mcCrouch") then
+		return
+	end
+	level.press_action(bind_to_dik(key_bindings.kCROUCH))
+	level.release_action(bind_to_dik(key_bindings.kCROUCH))
+	if not get_console_cmd(1, "g_crouch_toggle") then
+		exec_console_cmd("g_crouch_toggle 0")
+	end
+end
+
+local function apply_auto_crouch_for_mutant_skin(self, target_pos)
+	self.flags = self.flags or {}
+	self.flags.skin_was_crouching = IsMoveState("mcCrouch")
+	if not target_pos then
+		return
+	end
+	if should_auto_crouch_for_target(target_pos, self.flags.skin_was_crouching) then
+		press_auto_crouch()
+		log("mutant_skin: auto-crouch applied")
+	end
+end
+
+local function patched_get_template_action_mutant_skin(obj)
+	local a = original_get_template_action_mutant_skin(obj)
+	if not CONFIG.enabled then
+		return a
+	end
+
+	local target_pos = get_mutant_crouch_target_pos(obj)
+	local fdda_on_enter = a.on_enter
+	local fdda_on_exit = a.on_exit
+	local fdda_on_skip = a.on_skip
+	local speed_up = CONFIG.skin_speed_multiplier > 1
+
+	if speed_up then
+		a.speed = a.speed * CONFIG.skin_speed_multiplier
+		-- lam2 enter reads cam/snd from the hud section ltx before on_enter runs; point at a
+		-- missing key so it skips both (we play our own pitched cut sound instead).
+		a.cam = LAM2_MISSING_LTX_KEY
+		a.snd = LAM2_MISSING_LTX_KEY
+	end
+
+	a.on_enter = function(self)
+		apply_auto_crouch_for_mutant_skin(self, target_pos)
+		if speed_up then
+			if lam_fov_manager then
+				lam_fov_manager.restore_fov()
+			end
+			if skin_cut_sfx then
+				skin_cut_sfx:play_no_feedback(db.actor, sound_object.s2d, 0, VEC_ZERO, 1.0, CONFIG.skin_speed_multiplier)
+			end
+		elseif fdda_on_enter then
+			fdda_on_enter(self)
+		end
+	end
+
+	a.on_exit = function(self)
+		if speed_up then
+			level.remove_cam_effector(LAM2_CAM_EFFECTOR_ID)
+		end
+		if fdda_on_exit then
+			fdda_on_exit(self)
+		end
+		if self.flags and self.flags.skin_was_crouching ~= nil then
+			restore_auto_crouch(self.flags.skin_was_crouching)
+		end
+	end
+
+	a.on_skip = function(self)
+		if speed_up then
+			level.remove_cam_effector(LAM2_CAM_EFFECTOR_ID)
+		end
+		if fdda_on_skip then
+			fdda_on_skip(self)
+		end
+		if self.flags and self.flags.skin_was_crouching ~= nil then
+			restore_auto_crouch(self.flags.skin_was_crouching)
+		end
+	end
+
+	if speed_up then
+		log(string.format("mutant_skin: speed x%.2f", CONFIG.skin_speed_multiplier))
+	end
+	return a
+end
+
+local function patch_mutant_skin_speed()
+	if original_get_template_action_mutant_skin then
+		return
+	end
+	if not (_G.liz_fdda_redone_mutant_skinning and _G.liz_fdda_redone_mutant_skinning.get_template_action_mutant_skin) then
+		log("liz_fdda_redone_mutant_skinning.get_template_action_mutant_skin not found, nothing to patch (FDDA Redone's mutant skinning not installed?)")
+		return
+	end
+	original_get_template_action_mutant_skin = _G.liz_fdda_redone_mutant_skinning.get_template_action_mutant_skin
+	_G.liz_fdda_redone_mutant_skinning.get_template_action_mutant_skin = patched_get_template_action_mutant_skin
+	log("liz_fdda_redone_mutant_skinning.get_template_action_mutant_skin patched")
+end
+
+local function patched_set_sound_play(actor_id, sound_theme, ...)
+	if CONFIG.enabled and CONFIG.skin_speed_multiplier > 1 and sound_theme == MUTANT_LOOT_SOUND then
+		log("inv_mutant_loot_animal: suppressed in favor of the synced cut sound")
+		return
+	end
+	return original_xr_sound_set_sound_play(actor_id, sound_theme, ...)
+end
+
+local function patch_xr_sound()
+	if original_xr_sound_set_sound_play then
+		return
+	end
+	if not (_G.xr_sound and _G.xr_sound.set_sound_play) then
+		log("xr_sound.set_sound_play not found, nothing to patch")
+		return
+	end
+	original_xr_sound_set_sound_play = _G.xr_sound.set_sound_play
+	_G.xr_sound.set_sound_play = patched_set_sound_play
+	log("xr_sound.set_sound_play patched")
+end
+
 local function on_option_change()
 	CONFIG.enabled = DORN.mcm.bool(MOD_ID, "main/enabled", true)
 	CONFIG.debug_log = DORN.mcm.bool(MOD_ID, "development/debug_log", false)
+	CONFIG.skin_speed_multiplier = DORN.mcm.number(MOD_ID, "main/skin_speed_multiplier", 1)
 end
 
 local function on_actor_on_update()
@@ -111,6 +301,9 @@ function on_game_start()
 
 	patch_achievements()
 	patch_lam2()
+	patch_mutant_skin_speed()
+	patch_xr_sound()
+	skin_cut_sfx = sound_object(SKIN_CUT_SOUND)
 
 	RegisterScriptCallback("actor_on_update", on_actor_on_update)
 	RegisterScriptCallback("on_option_change", on_option_change)
