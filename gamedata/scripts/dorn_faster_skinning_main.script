@@ -39,6 +39,10 @@
 	auto-crouch on the knife-cut: crouch down when the corpse is far enough below the actor,
 	stand back up when it is above, and restore the prior crouch state once the cut ends. Honors
 	FDDA Redone MCM -> Body Search -> "Auto crouch".
+
+	We also lock movement as soon as the knife-cut action is queued. lam2 normally waits until
+	action enter (and may run hide_items_in_hands first) before disable_input kicks in, which
+	leaves a short window where the player can still walk.
 ]]
 
 local MOD_ID = "dorn_faster_skinning"
@@ -48,6 +52,7 @@ local DORN
 
 local WELL_DRESSED_ID = "well_dressed"
 local ACTION_MUTANT_LOOT = "mutant_loot"
+local ACTION_MUTANT_SKIN = "mutant_skin"
 local MUTANT_LOOT_SOUND = "inv_mutant_loot_animal"
 local SKIN_CUT_SOUND = "interface\\item_usage\\harvest_use"
 local LAM2_CAM_EFFECTOR_ID = 2190 -- lam2.get_template_action_play_animation's cam effector id
@@ -97,10 +102,43 @@ local function patch_achievements()
 	log("game_achievements.has_achievement patched")
 end
 
+local function lock_mutant_skin_movement()
+	level.disable_input()
+	game.only_allow_movekeys(false)
+	if _G.liz_fdda_input_manager then
+		liz_fdda_input_manager.is_input_disabled = true
+	end
+	game.set_actor_allow_ladder(false)
+end
+
+local function unlock_mutant_skin_movement()
+	level.enable_input()
+	game.only_allow_movekeys(false)
+	if _G.liz_fdda_input_manager then
+		liz_fdda_input_manager.is_input_disabled = false
+	end
+	game.set_actor_allow_ladder(true)
+end
+
+local function release_mutant_skin_movement_lock(self)
+	if not (self.flags and self.flags.dorn_early_movement_lock) then
+		return
+	end
+	unlock_mutant_skin_movement()
+	self.flags.dorn_early_movement_lock = nil
+	log("mutant_skin: movement lock released")
+end
+
 local function patched_add_action(action)
 	if CONFIG.enabled and action and action.name == ACTION_MUTANT_LOOT then
 		log("mutant_loot: dropped from queue (item is already in inventory)")
 		return
+	end
+	if CONFIG.enabled and action and action.name == ACTION_MUTANT_SKIN then
+		lock_mutant_skin_movement()
+		action.flags = action.flags or {}
+		action.flags.dorn_early_movement_lock = true
+		log("mutant_skin: movement locked on queue")
 	end
 	return original_lam2_add_action(action)
 end
@@ -209,6 +247,8 @@ local function patched_get_template_action_mutant_skin(obj)
 	end
 
 	a.on_enter = function(self)
+		self.flags = self.flags or {}
+		self.flags.dorn_skin_entered = true
 		apply_auto_crouch_for_mutant_skin(self, target_pos)
 		if speed_up then
 			if lam_fov_manager then
@@ -232,6 +272,7 @@ local function patched_get_template_action_mutant_skin(obj)
 		if self.flags and self.flags.skin_was_crouching ~= nil then
 			restore_auto_crouch(self.flags.skin_was_crouching)
 		end
+		release_mutant_skin_movement_lock(self)
 	end
 
 	a.on_skip = function(self)
@@ -244,6 +285,7 @@ local function patched_get_template_action_mutant_skin(obj)
 		if self.flags and self.flags.skin_was_crouching ~= nil then
 			restore_auto_crouch(self.flags.skin_was_crouching)
 		end
+		release_mutant_skin_movement_lock(self)
 	end
 
 	if speed_up then
