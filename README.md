@@ -2,6 +2,10 @@
 
 Speeds up mutant skinning/looting in **S.T.A.L.K.E.R. G.A.M.M.A.** without touching any animation files.
 
+## Demo
+
+https://github.com/JoshuaCarter/GAMMA-Faster-Skinning/raw/main/skinning.mp4
+
 ## The problem
 
 The vanilla "Well Dressed" achievement (500 mutant kills, or 250 field dressings) is meant to
