@@ -63,7 +63,7 @@ local CROUCH_HEIGHT_DELTA = 0.9 -- matches liz_fdda_redone_body_search.is_should
 local CONFIG = {
 	enabled = true,
 	debug_log = false,
-	skin_speed_multiplier = 1,
+	skin_speed_multiplier = 1.5,
 }
 
 local original_has_achievement = nil
@@ -331,7 +331,7 @@ end
 local function on_option_change()
 	CONFIG.enabled = DORN.mcm.bool(MOD_ID, "main/enabled", true)
 	CONFIG.debug_log = DORN.mcm.bool(MOD_ID, "development/debug_log", false)
-	CONFIG.skin_speed_multiplier = DORN.mcm.number(MOD_ID, "main/skin_speed_multiplier", 1)
+	CONFIG.skin_speed_multiplier = DORN.mcm.number(MOD_ID, "main/skin_speed_multiplier", 1.5)
 end
 
 local function on_actor_on_update()
@@ -340,6 +340,8 @@ end
 
 function on_game_start()
 	DORN = _G[DORN_COMMON_VERSION].load(MOD_ID)
+
+	on_option_change()
 
 	patch_achievements()
 	patch_lam2()
