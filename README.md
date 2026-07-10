@@ -1,4 +1,4 @@
-# Dorn's Faster Skinning v0.1.2
+# Dorn's Faster Skinning v0.1.3
 
 Speeds up mutant skinning in **S.T.A.L.K.E.R. G.A.M.M.A.** as a more immersive alternative to completely disabling the skinning animation.
 
