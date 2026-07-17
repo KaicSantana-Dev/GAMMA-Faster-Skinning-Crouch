@@ -1,13 +1,4 @@
--- dorn_mcm_banner:begin (managed by sync-dorn-common.sh)
-local DORN_COMMON_VERSION = "dorn_common_c62f913d"
-local function dorn_mcm()
-	local hash = DORN_COMMON_VERSION:match("dorn_common_(.+)$")
-	return _G["dorn_mcm_" .. hash]
-end
--- dorn_mcm_banner:end
-
 function on_mcm_load()
-	local MCM = dorn_mcm()
 	return {
 		id = "dorn_faster_skinning",
 		text = "Dorn's Faster Skinning",
@@ -16,7 +7,7 @@ function on_mcm_load()
 				id = "main",
 				sh = true,
 				text = "Main",
-				gr = MCM.with_header({
+				gr = {
 					{
 						id = "main_description",
 						type = "desc",
@@ -39,13 +30,13 @@ function on_mcm_load()
 						def = 1.5,
 						hint = "dorn_faster_skinning_skin_speed_multiplier",
 					},
-				}),
+				},
 			},
 			{
 				id = "development",
 				sh = true,
 				text = "Development",
-				gr = MCM.with_header({
+				gr = {
 					{
 						id = "debug_log",
 						type = "check",
@@ -53,7 +44,7 @@ function on_mcm_load()
 						def = false,
 						hint = "dorn_faster_skinning_debug_log",
 					},
-				}),
+				},
 			},
 		},
 	}
