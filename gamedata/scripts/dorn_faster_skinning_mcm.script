@@ -39,6 +39,13 @@ function on_mcm_load()
 						def = 1.5,
 						hint = "dorn_faster_skinning_skin_speed_multiplier",
 					},
+					{
+						id = "auto_crouch",
+						type = "check",
+						val = 1,
+						def = false,
+						hint = "dorn_faster_skinning_auto_crouch",
+					},
 				}),
 			},
 			{

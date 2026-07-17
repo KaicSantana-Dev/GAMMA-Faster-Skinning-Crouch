@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="windows-1251"?>
 <string_table>
 	<string id="ui_mcm_dorn_faster_skinning_main_description">
-		<text>The vanilla "Well Dressed" achievement (500 kills, or 250 field dressings) is meant to speed up mutant skinning/looting, but takes hours of grinding to earn. This mod applies that speed-up by default. Equipping a Hunting Kit still stacks on top for the fastest tier, same as vanilla. If FDDA Redone's mutant skinning is installed, this also skips the extra "tucking the part away" animation that plays after the knife-cut - the part is already in your inventory by then, so nothing is lost - and applies FDDA body search's auto-crouch on the knife-cut.</text>
+		<text>The vanilla "Well Dressed" achievement (500 kills, or 250 field dressings) is meant to speed up mutant skinning/looting, but takes hours of grinding to earn. This mod applies that speed-up by default. Equipping a Hunting Kit still stacks on top for the fastest tier, same as vanilla. If FDDA Redone's mutant skinning is installed, this also skips the extra "tucking the part away" animation that plays after the knife-cut - the part is already in your inventory by then, so nothing is lost.</text>
 	</string>
 	<string id="ui_mcm_dorn_faster_skinning_enabled">
 		<text>Enable</text>
@@ -20,5 +20,11 @@
 	</string>
 	<string id="ui_mcm_dorn_faster_skinning_skin_speed_multiplier_desc">
 		<text>Speeds up the knife-cut animation itself when FDDA Redone's mutant skinning is installed. Above 1x we swap in our own cut sound pitched to match (since the vanilla one can't be sped up to match) and skip all camera motion tied to the cut.</text>
+	</string>
+	<string id="ui_mcm_dorn_faster_skinning_auto_crouch">
+		<text>Auto-crouch on skinning (FDDA Redone)</text>
+	</string>
+	<string id="ui_mcm_dorn_faster_skinning_auto_crouch_desc">
+		<text>Crouch when the knife-cut starts and stand back up when it ends. Only applies if you were standing. Works with both hold-crouch and toggle-crouch.</text>
 	</string>
 </string_table>
